@@ -5,23 +5,39 @@
 #ifndef VOXELCRAFT_BLOCK_H
 #define VOXELCRAFT_BLOCK_H
 
+#include <stdint.h>
+#include <stdbool.h>
 #include "raylib.h"
 
-typedef enum {
-    BLOCK_AIR   = 0,
-    BLOCK_GRASS = 1,
-    BLOCK_DIRT  = 2,
-    BLOCK_STONE = 3,
-    BLOCK_COUNT
-} BlockType;
+#define MAX_BLOCK_TYPES 4096
+#define NAMESPACE_LEN   64
+#define NAME_LEN        64
 
-typedef struct { Color top, side, bottom; } BlockColors;
+typedef struct {
+    uint16_t  runtime_id;
+    char      namespace[64];
+    char      name[64];
+    char      full_name[129];
 
-static BlockColors BLOCK_PALETTE[BLOCK_COUNT] = {
-    { {0,0,0,0},           {0,0,0,0},           {0,0,0,0}           }, // AIR
-    { {106,145,80,255},    {86,125,70,255},      {121,85,58,255}     }, // GRASS
-    { {131,95,68,255},     {121,85,58,255},      {111,75,48,255}     }, // DIRT
-    { {148,148,148,255},   {128,128,128,255},    {108,108,108,255}   }, // STONE
-};
+    bool      solid;
+    bool      transparent;
+    uint8_t   light_emission;
+
+    char      tex_top_key[128];
+    char      tex_side_key[128];
+    char      tex_bottom_key[128];
+    
+    Rectangle tex_top;
+    Rectangle tex_side;
+    Rectangle tex_bottom;
+} BlockDef;
+
+extern BlockDef  g_blocks[MAX_BLOCK_TYPES];
+extern int       g_block_count;
+
+uint16_t block_register(const char *namespace, const char *name);
+BlockDef *block_get_by_id(uint16_t id);
+BlockDef *block_get_by_name(const char *full_name);
+uint16_t block_get_id(const char *full_name);
 
 #endif //VOXELCRAFT_BLOCK_H

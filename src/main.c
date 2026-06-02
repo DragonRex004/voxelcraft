@@ -20,15 +20,19 @@ int main(void) {
 
     Chunk world[WORLD_W][WORLD_D];
 
-    for (int cx = 0; cx < WORLD_W; cx++) {
+    for (int cx = 0; cx < WORLD_W; cx++)
         for (int cz = 0; cz < WORLD_D; cz++) {
             world[cx][cz] = (Chunk){0};
             world[cx][cz].cx = cx;
             world[cx][cz].cz = cz;
             chunk_generate(&world[cx][cz]);
-            chunk_build_mesh(&world[cx][cz]);
         }
-    }
+
+    world_link_neighbors(world, WORLD_W, WORLD_D);
+
+    for (int cx = 0; cx < WORLD_W; cx++)
+        for (int cz = 0; cz < WORLD_D; cz++)
+            chunk_build_mesh(&world[cx][cz]);
 
     while (!WindowShouldClose()) {
         UpdateCamera(&cam, CAMERA_FREE);

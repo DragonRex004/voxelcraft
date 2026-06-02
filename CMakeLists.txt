@@ -21,6 +21,13 @@ add_executable(${PROJECT_NAME} src/main.c
         src/chunk.h
         src/block.h
         src/raycast.h
-        src/world.h)
+        src/world.h
+        src/block.c
+        src/chunk.c
+        src/atlas.h
+        src/atlas.c
+        src/block_loader.h
+        src/cJson/cJSON.c
+        src/cJson/cJSON_Utils.c)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE raylib)

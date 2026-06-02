@@ -74,20 +74,6 @@ RaycastResult world_raycast(Chunk world[][WORLD_D], int ww, int wd,
     return res;
 }
 
-void world_set_block(Chunk world[][WORLD_D], int ww, int wd,
-                     int wx, int wy, int wz, uint8_t type)
-{
-    if (wy < 0 || wy >= CHUNK_H) return;
-    int cx = wx / CHUNK_W, cz = wz / CHUNK_D;
-    int lx = wx % CHUNK_W, lz = wz % CHUNK_D;
-    if (cx < 0 || cx >= ww || cz < 0 || cz >= wd) return;
-    if (lx < 0 || lz < 0) return;
-
-    world[cx][cz].blocks[lx][wy][lz] = type;
-    world[cx][cz].mesh_dirty = true;
-    chunk_build_mesh(&world[cx][cz]);
-}
-
 Vector3 camera_forward(Camera3D *cam) {
     Vector3 dir = Vector3Subtract(cam->target, cam->position);
     float len = sqrtf(dir.x*dir.x + dir.y*dir.y + dir.z*dir.z);
