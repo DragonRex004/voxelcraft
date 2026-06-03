@@ -31,3 +31,12 @@ add_executable(${PROJECT_NAME} src/main.c
         src/cJson/cJSON_Utils.c)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
+
+add_custom_target(copy_assets ALL
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory
+        "${CMAKE_SOURCE_DIR}/assets"
+        "${CMAKE_BINARY_DIR}/assets"
+        COMMENT "Copy Assets in Build-Directory..."
+)
+
+add_dependencies(${PROJECT_NAME} copy_assets)

@@ -8,8 +8,6 @@
 #include <stdint.h>
 #include "raylib.h"
 #include "raymath.h"
-#include <math.h>
-#include "block.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -17,6 +15,7 @@
 #define CHUNK_H 64
 #define CHUNK_D 16
 #define MAX_VERTS (CHUNK_W * CHUNK_H * CHUNK_D * 6 * 4)
+#define MAX_INDICES (CHUNK_W * CHUNK_H * CHUNK_D * 6 * 2 * 3)
 
 typedef struct Chunk Chunk;
 
@@ -52,15 +51,18 @@ static bool is_solid(const Chunk *c, int x, int y, int z);
 
 static float   tmp_verts  [MAX_VERTS * 3];
 static float   tmp_normals[MAX_VERTS * 3];
-static uint8_t tmp_colors [MAX_VERTS * 4];
+static float   tmp_texcoords[MAX_VERTS * 2];
 static unsigned short tmp_indices[MAX_VERTS / 4 * 6];
 
 static int vert_count = 0;
 static int idx_count  = 0;
 
+typedef struct { float u, v; } UV;
+
 static void push_quad(
-    Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3,
-    Vector3 normal, Color col);
+Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3,
+Vector3 normal,
+Rectangle atlas_uv);
 
 void chunk_build_mesh(Chunk *c);
 

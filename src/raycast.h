@@ -6,8 +6,10 @@
 #define VOXELCRAFT_RAYCAST_H
 
 #include "raylib.h"
+#include "raymath.h"
 #include "chunk.h"
 #include "world.h"
+#include <math.h>
 
 typedef struct {
     bool  hit;
@@ -44,13 +46,17 @@ RaycastResult world_raycast(Chunk world[][WORLD_D], int ww, int wd,
 
     float t = 0;
     while (t < max_dist) {
-        int cx = bx / CHUNK_W; int cz_idx = bz / CHUNK_D;
-        int lx = bx % CHUNK_W; int lz = bz % CHUNK_D;
+        int cx     = bx / CHUNK_W;
+        int cz_idx = bz / CHUNK_D;
+        int lx     = bx % CHUNK_W;
+        int lz     = bz % CHUNK_D;
 
         if (cx >= 0 && cx < ww && cz_idx >= 0 && cz_idx < wd &&
             by >= 0 && by < CHUNK_H && lx >= 0 && lz >= 0)
         {
-            if (world[cx][cz_idx].blocks[lx][by][lz] != BLOCK_AIR) {
+            // NEU: != 0 statt != BLOCK_AIR
+            // AIR ist immer ID 0 in der Block-Registry
+            if (world[cx][cz_idx].blocks[lx][by][lz] != 0) {
                 res.hit = true;
                 res.bx = bx; res.by = by; res.bz = bz;
                 res.nx = bx + last_nx;
@@ -77,6 +83,7 @@ RaycastResult world_raycast(Chunk world[][WORLD_D], int ww, int wd,
 Vector3 camera_forward(Camera3D *cam) {
     Vector3 dir = Vector3Subtract(cam->target, cam->position);
     float len = sqrtf(dir.x*dir.x + dir.y*dir.y + dir.z*dir.z);
+    if (len < 0.0001f) return (Vector3){0, 0, 1};
     return (Vector3){dir.x/len, dir.y/len, dir.z/len};
 }
 

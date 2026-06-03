@@ -4,6 +4,9 @@
 
 #include "chunk.h"
 
+#include "atlas.h"
+#include "block.h"
+
 float fade(float t) {
     return t * t * t * (t * (t * 6 - 15) + 10);
 }
@@ -72,21 +75,29 @@ void chunk_load(Chunk *c, FILE *f) {
 
 void chunk_generate(Chunk *c) {
     noise_init(12345);
+
+    uint16_t ID_AIR   = block_get_id("base:air");
+    uint16_t ID_GRASS = block_get_id("base:grass");
+    uint16_t ID_DIRT  = block_get_id("base:dirt");
+    uint16_t ID_STONE = block_get_id("base:stone");
+
     for (int x = 0; x < CHUNK_W; x++) {
         for (int z = 0; z < CHUNK_D; z++) {
             float wx = (float)(c->cx * CHUNK_W + x);
             float wz = (float)(c->cz * CHUNK_D + z);
+
             float n = octave_noise(wx * 0.03f, wz * 0.03f, 4);
             int height = 12 + (int)(n * 14.0f);
 
             for (int y = 0; y < CHUNK_H; y++) {
-                if      (y > height)    c->blocks[x][y][z] = BLOCK_AIR;
-                else if (y == height)   c->blocks[x][y][z] = BLOCK_GRASS;
-                else if (y >= height-3) c->blocks[x][y][z] = BLOCK_DIRT;
-                else                    c->blocks[x][y][z] = BLOCK_STONE;
+                if      (y > height)    c->blocks[x][y][z] = ID_AIR;
+                else if (y == height)   c->blocks[x][y][z] = ID_GRASS;
+                else if (y >= height-3) c->blocks[x][y][z] = ID_DIRT;
+                else                    c->blocks[x][y][z] = ID_STONE;
             }
         }
     }
+
     c->mesh_dirty = true;
 }
 
@@ -94,31 +105,33 @@ bool is_solid(const Chunk *c, int x, int y, int z) {
     if (y < 0 || y >= CHUNK_H) return false;
 
     if (x < 0) {
-        if (!c->neighbor_nx) return false; // kein Nachbar = Fläche sichtbar
-        return c->neighbor_nx->blocks[CHUNK_W + x][y][z] != BLOCK_AIR;
+        if (!c->neighbor_nx) return false;
+        return c->neighbor_nx->blocks[CHUNK_W + x][y][z] != 0;
     }
     if (x >= CHUNK_W) {
         if (!c->neighbor_px) return false;
-        return c->neighbor_px->blocks[x - CHUNK_W][y][z] != BLOCK_AIR;
+        return c->neighbor_px->blocks[x - CHUNK_W][y][z] != 0;
     }
 
     if (z < 0) {
         if (!c->neighbor_nz) return false;
-        return c->neighbor_nz->blocks[x][y][CHUNK_D + z] != BLOCK_AIR;
+        return c->neighbor_nz->blocks[x][y][CHUNK_D + z] != 0;
     }
     if (z >= CHUNK_D) {
         if (!c->neighbor_pz) return false;
-        return c->neighbor_pz->blocks[x][y][z - CHUNK_D] != BLOCK_AIR;
+        return c->neighbor_pz->blocks[x][y][z - CHUNK_D] != 0;
     }
 
-    return c->blocks[x][y][z] != BLOCK_AIR;
+    return c->blocks[x][y][z] != 0;
 }
 
-void push_quad(
-   Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3,
-   Vector3 normal, Color col)
+void push_quad_uv(
+    Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3,
+    Vector3 normal,
+    Rectangle atlas_uv)
 {
     int base = vert_count;
+
     float *vp = tmp_verts + base * 3;
     vp[0]=v0.x; vp[1]=v0.y; vp[2]=v0.z;
     vp[3]=v1.x; vp[4]=v1.y; vp[5]=v1.z;
@@ -132,21 +145,25 @@ void push_quad(
         np[i*3+2] = normal.z;
     }
 
-    uint8_t *cp = tmp_colors + base * 4;
-    for (int i = 0; i < 4; i++) {
-        cp[i*4+0] = col.r;
-        cp[i*4+1] = col.g;
-        cp[i*4+2] = col.b;
-        cp[i*4+3] = col.a;
-    }
+    float u0 = atlas_uv.x;
+    float v0_ = atlas_uv.y;
+    float u1 = atlas_uv.x + atlas_uv.width;
+    float v1_ = atlas_uv.y + atlas_uv.height;
+
+    float *tp = tmp_texcoords + base * 2;
+
+    tp[0] = u0;  tp[1] = v0_;
+    tp[2] = u1;  tp[3] = v0_;
+    tp[4] = u1;  tp[5] = v1_;
+    tp[6] = u0;  tp[7] = v1_;
 
     unsigned short *ip = tmp_indices + idx_count;
     ip[0]=(unsigned short)(base+0);
-    ip[1]=(unsigned short)(base+2);
-    ip[2]=(unsigned short)(base+1);
+    ip[1]=(unsigned short)(base+1);
+    ip[2]=(unsigned short)(base+2);
     ip[3]=(unsigned short)(base+0);
-    ip[4]=(unsigned short)(base+3);
-    ip[5]=(unsigned short)(base+2);
+    ip[4]=(unsigned short)(base+2);
+    ip[5]=(unsigned short)(base+3);
 
     vert_count += 4;
     idx_count  += 6;
@@ -162,92 +179,102 @@ void chunk_build_mesh(Chunk *c) {
     for (int x = 0; x < CHUNK_W; x++) {
         for (int y = 0; y < CHUNK_H; y++) {
             for (int z = 0; z < CHUNK_D; z++) {
-                uint8_t b = c->blocks[x][y][z];
-                if (b == BLOCK_AIR) continue;
+                uint16_t bid = c->blocks[x][y][z];
+                if (bid == 0) continue;
 
-                BlockColors *pal = &BLOCK_PALETTE[b];
-                float fx = ox + x, fy = y, fz = oz + z;
+                BlockDef *def = block_get_by_id(bid);
+                if (!def) continue;
 
-                // +Y Up
+                float fx = ox + x, fy = (float)y, fz = oz + z;
+
+                Rectangle uv_top    = def->tex_top;
+                Rectangle uv_side   = def->tex_side;
+                Rectangle uv_bottom = def->tex_bottom;
+
+                // +Y up
                 if (!is_solid(c, x, y+1, z))
-                    push_quad(
+                    push_quad_uv(
                         (Vector3){fx,   fy+1, fz  },
                         (Vector3){fx+1, fy+1, fz  },
                         (Vector3){fx+1, fy+1, fz+1},
                         (Vector3){fx,   fy+1, fz+1},
-                        (Vector3){0, 1, 0}, pal->top);
+                        (Vector3){0, 1, 0}, uv_top);
 
-                // -Y Down
+                // -Y down
                 if (!is_solid(c, x, y-1, z))
-                    push_quad(
+                    push_quad_uv(
                         (Vector3){fx,   fy, fz+1},
                         (Vector3){fx+1, fy, fz+1},
                         (Vector3){fx+1, fy, fz  },
                         (Vector3){fx,   fy, fz  },
-                        (Vector3){0, -1, 0}, pal->bottom);
+                        (Vector3){0, -1, 0}, uv_bottom);
 
-                // +X Right
+                // +X right
                 if (!is_solid(c, x+1, y, z))
-                    push_quad(
+                    push_quad_uv(
                         (Vector3){fx+1, fy,   fz  },
                         (Vector3){fx+1, fy,   fz+1},
                         (Vector3){fx+1, fy+1, fz+1},
                         (Vector3){fx+1, fy+1, fz  },
-                        (Vector3){1, 0, 0}, pal->side);
+                        (Vector3){1, 0, 0}, uv_side);
 
-                // -X Left
+                // -X left
                 if (!is_solid(c, x-1, y, z))
-                    push_quad(
+                    push_quad_uv(
                         (Vector3){fx, fy,   fz+1},
                         (Vector3){fx, fy,   fz  },
                         (Vector3){fx, fy+1, fz  },
                         (Vector3){fx, fy+1, fz+1},
-                        (Vector3){-1, 0, 0}, pal->side);
+                        (Vector3){-1, 0, 0}, uv_side);
 
-                // +Z Front
+                // +Z front
                 if (!is_solid(c, x, y, z+1))
-                    push_quad(
+                    push_quad_uv(
                         (Vector3){fx+1, fy,   fz+1},
                         (Vector3){fx,   fy,   fz+1},
                         (Vector3){fx,   fy+1, fz+1},
                         (Vector3){fx+1, fy+1, fz+1},
-                        (Vector3){0, 0, 1}, pal->side);
+                        (Vector3){0, 0, 1}, uv_side);
 
-                // -Z Back
+                // -Z back
                 if (!is_solid(c, x, y, z-1))
-                    push_quad(
+                    push_quad_uv(
                         (Vector3){fx,   fy,   fz},
                         (Vector3){fx+1, fy,   fz},
                         (Vector3){fx+1, fy+1, fz},
                         (Vector3){fx,   fy+1, fz},
-                        (Vector3){0, 0, -1}, pal->side);
+                        (Vector3){0, 0, -1}, uv_side);
             }
         }
     }
-
 
     if (c->mesh.vertexCount > 0) {
         UnloadModel(c->model);
         c->mesh.vertexCount = 0;
     }
 
+    if (vert_count == 0) return;
+
     Mesh m = {0};
     m.vertexCount   = vert_count;
     m.triangleCount = idx_count / 3;
 
-    m.vertices = (float*)MemAlloc(vert_count * 3 * sizeof(float));
-    m.normals  = (float*)MemAlloc(vert_count * 3 * sizeof(float));
-    m.colors   = (unsigned char*)MemAlloc(vert_count * 4 * sizeof(unsigned char));
-    m.indices  = (unsigned short*)MemAlloc(idx_count * sizeof(unsigned short));
+    m.vertices  = (float*)MemAlloc(vert_count * 3 * sizeof(float));
+    m.normals   = (float*)MemAlloc(vert_count * 3 * sizeof(float));
+    m.texcoords = (float*)MemAlloc(vert_count * 2 * sizeof(float)); // NEU
+    m.indices   = (unsigned short*)MemAlloc(idx_count * sizeof(unsigned short));
 
-    memcpy(m.vertices, tmp_verts,   vert_count * 3 * sizeof(float));
-    memcpy(m.normals,  tmp_normals, vert_count * 3 * sizeof(float));
-    memcpy(m.colors,   tmp_colors,  vert_count * 4 * sizeof(unsigned char));
-    memcpy(m.indices,  tmp_indices, idx_count  * sizeof(unsigned short));
+    memcpy(m.vertices,   tmp_verts,     vert_count * 3 * sizeof(float));
+    memcpy(m.normals,    tmp_normals,   vert_count * 3 * sizeof(float));
+    memcpy(m.texcoords,  tmp_texcoords, vert_count * 2 * sizeof(float));
+    memcpy(m.indices,    tmp_indices,   idx_count  * sizeof(unsigned short));
 
     UploadMesh(&m, false);
     c->mesh  = m;
     c->model = LoadModelFromMesh(m);
+
+    c->model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = g_atlas_texture;
+
     c->mesh_dirty = false;
 }
 

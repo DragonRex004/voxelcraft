@@ -1,0 +1,43 @@
+{
+  "namespace": "base",
+  "blocks": [
+    {
+      "name": "air",
+      "textures": {
+        "all": "air.png"
+      },
+      "solid": false,
+      "transparent": true,
+      "light_emission": 0
+    },
+    {
+      "name": "grass",
+      "textures": {
+        "top":    "grass_top.png",
+        "bottom": "dirt.png",
+        "sides":  "grass_side.png"
+      },
+      "solid": true,
+      "transparent": false,
+      "light_emission": 0
+    },
+    {
+      "name": "dirt",
+      "textures": {
+        "all": "dirt.png"
+      },
+      "solid": true,
+      "transparent": false,
+      "light_emission": 0
+    },
+    {
+      "name": "stone",
+      "textures": {
+        "all": "stone.png"
+      },
+      "solid": true,
+      "transparent": false,
+      "light_emission": 0
+    }
+  ]
+}
